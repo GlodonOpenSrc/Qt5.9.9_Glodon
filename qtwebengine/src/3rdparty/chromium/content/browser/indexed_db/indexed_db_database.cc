@@ -338,7 +338,7 @@ class IndexedDBDatabase::DeleteRequest
     int64_t old_version = db_->metadata_.version;
     db_->metadata_.id = kInvalidId;
     db_->metadata_.version = IndexedDBDatabaseMetadata::NO_VERSION;
-    db_->metadata_.max_object_store_id = kInvalidId;
+    db_->metadata_.max_object_store_id = 0;
     db_->metadata_.object_stores.clear();
     callbacks_->OnSuccess(old_version);
     db_->factory_->DatabaseDeleted(db_->identifier_);
@@ -463,8 +463,12 @@ leveldb::Status IndexedDBDatabase::OpenInternal() {
     return backing_store_->GetObjectStores(metadata_.id,
                                            &metadata_.object_stores);
 
-  return backing_store_->CreateIDBDatabaseMetaData(
+  s = backing_store_->CreateIDBDatabaseMetaData(
       metadata_.name, metadata_.version, &metadata_.id);
+  if (s.ok())
+    metadata_.max_object_store_id = 0;
+
+  return s;
 }
 
 IndexedDBDatabase::~IndexedDBDatabase() {
@@ -2043,10 +2047,10 @@ void IndexedDBDatabase::DeleteDatabase(
 void IndexedDBDatabase::ForceClose() {
   // IndexedDBConnection::ForceClose() may delete this database, so hold ref.
   scoped_refptr<IndexedDBDatabase> protect(this);
-  auto it = connections_.begin();
-  while (it != connections_.end()) {
-    IndexedDBConnection* connection = *it++;
+  while (!connections_.empty()) {
+    IndexedDBConnection* connection = *connections_.begin();
     connection->ForceClose();
+    connections_.erase(connection);
   }
   DCHECK(connections_.empty());
 }

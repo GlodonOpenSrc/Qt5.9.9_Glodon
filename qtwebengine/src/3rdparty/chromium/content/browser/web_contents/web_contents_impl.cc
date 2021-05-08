@@ -136,6 +136,7 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/accessibility/ax_tree_combiner.h"
 #include "ui/base/layout.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gl/gl_switches.h"
 
@@ -1392,6 +1393,20 @@ void WebContentsImpl::WasHidden() {
   should_normally_be_visible_ = false;
 }
 
+bool WebContentsImpl::HasRecentInteractiveInputEvent() const {
+  static constexpr base::TimeDelta kMaxInterval =
+      base::TimeDelta::FromSeconds(5);
+  base::TimeDelta delta =
+      ui::EventTimeForNow() - last_interactive_input_event_time_;
+  // Note: the expectation is that the caller is typically expecting an input
+  // event, e.g. validating that a WebUI message that requires a gesture is
+  // actually attached to a gesture. Logging to UMA here should hopefully give
+  // sufficient data if 5 seconds is actually sufficient (or even too high a
+  // threshhold).
+  UMA_HISTOGRAM_TIMES("Tabs.TimeSinceLastInteraction", delta);
+  return delta <= kMaxInterval;
+}
+
 void WebContentsImpl::WasOccluded() {
   if (capturer_count_ > 0)
     return;
@@ -2157,8 +2172,7 @@ void WebContentsImpl::CreateNewWindow(
 
   // Any new WebContents opened while this WebContents is in fullscreen can be
   // used to confuse the user, so drop fullscreen.
-  if (IsFullscreenForCurrentTab())
-    ExitFullscreen(true);
+  ForSecurityDropFullscreen();
 
   if (params.opener_suppressed) {
     // When the opener is suppressed, the original renderer cannot access the
@@ -3052,9 +3066,8 @@ void WebContentsImpl::SystemDragEnded(RenderWidgetHost* source_rwh) {
     browser_plugin_embedder_->SystemDragEnded();
 }
 
-void WebContentsImpl::UserGestureDone() {
-  OnUserInteraction(GetRenderViewHost()->GetWidget(),
-                    blink::WebInputEvent::Undefined);
+void WebContentsImpl::NavigatedByUser() {
+  OnUserInteraction(blink::WebInputEvent::Undefined);
 }
 
 void WebContentsImpl::SetClosedByUserGesture(bool value) {
@@ -4115,10 +4128,19 @@ void WebContentsImpl::RunJavaScriptMessage(
     const GURL& frame_url,
     JavaScriptMessageType javascript_message_type,
     IPC::Message* reply_msg) {
+  // Ensure that if showing a dialog is the first thing that a page does, that
+  // the contents of the previous page aren't shown behind it. This is required
+  // because showing a dialog freezes the renderer, so no frames will be coming
+  // from it. https://crbug.com/823353
+  auto* render_widget_host_impl =
+      static_cast<RenderFrameHostImpl*>(render_frame_host)
+          ->GetRenderWidgetHost();
+  if (render_widget_host_impl)
+    render_widget_host_impl->ForceFirstFrameAfterNavigationTimeout();
+
   // Running a dialog causes an exit to webpage-initiated fullscreen.
   // http://crbug.com/728276
-  if (IsFullscreenForCurrentTab())
-    ExitFullscreen(true);
+  ForSecurityDropFullscreen();
 
   // Suppress JavaScript dialogs when requested. Also suppress messages when
   // showing an interstitial as it's shown over the previous page and we don't
@@ -4155,10 +4177,19 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
     RenderFrameHost* render_frame_host,
     bool is_reload,
     IPC::Message* reply_msg) {
+  // Ensure that if showing a dialog is the first thing that a page does, that
+  // the contents of the previous page aren't shown behind it. This is required
+  // because showing a dialog freezes the renderer, so no frames will be coming
+  // from it. https://crbug.com/823353
+  auto* render_widget_host_impl =
+      static_cast<RenderFrameHostImpl*>(render_frame_host)
+          ->GetRenderWidgetHost();
+  if (render_widget_host_impl)
+    render_widget_host_impl->ForceFirstFrameAfterNavigationTimeout();
+
   // Running a dialog causes an exit to webpage-initiated fullscreen.
   // http://crbug.com/728276
-  if (IsFullscreenForCurrentTab())
-    ExitFullscreen(true);
+  ForSecurityDropFullscreen();
 
   RenderFrameHostImpl* rfhi =
       static_cast<RenderFrameHostImpl*>(render_frame_host);
@@ -4187,6 +4218,10 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
 
 void WebContentsImpl::RunFileChooser(RenderFrameHost* render_frame_host,
                                      const FileChooserParams& params) {
+  // Any explicit focusing of another window while this WebContents is in
+  // fullscreen can be used to confuse the user, so drop fullscreen.
+  ForSecurityDropFullscreen();
+
   if (delegate_)
     delegate_->RunFileChooser(render_frame_host, params);
 }
@@ -4694,6 +4729,15 @@ void WebContentsImpl::EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) {
   }
 }
 
+void WebContentsImpl::ForSecurityDropFullscreen() {
+  WebContentsImpl* web_contents = this;
+  while (web_contents) {
+    if (web_contents->IsFullscreenForCurrentTab())
+      web_contents->ExitFullscreen(true);
+    web_contents = web_contents->GetOuterWebContents();
+  }
+}
+
 void WebContentsImpl::SetAsFocusedWebContentsIfNecessary() {
   // Only change focus if we are not currently focused.
   WebContentsImpl* old_contents = GetFocusedWebContents();
@@ -4718,8 +4762,13 @@ void WebContentsImpl::SetFocusedFrame(FrameTreeNode* node,
   }
 
   SetAsFocusedWebContentsIfNecessary();
-
   frame_tree_.SetFocusedFrame(node, source);
+}
+
+void WebContentsImpl::DidCallFocus() {
+  // Any explicit focusing of another window while this WebContents is in
+  // fullscreen can be used to confuse the user, so drop fullscreen.
+  ForSecurityDropFullscreen();
 }
 
 void WebContentsImpl::OnFocusedElementChangedInFrame(
@@ -4759,21 +4808,25 @@ bool WebContentsImpl::DidAddMessageToConsole(int32_t level,
                                            source_id);
 }
 
-void WebContentsImpl::OnUserInteraction(
+void WebContentsImpl::DidReceiveInputEvent(
     RenderWidgetHostImpl* render_widget_host,
     const blink::WebInputEvent::Type type) {
+  // Ideally, this list would be based more off of
+  // https://whatwg.org/C/interaction.html#triggered-by-user-activation.
+  if (type != blink::WebInputEvent::MouseDown &&
+      type != blink::WebInputEvent::GestureScrollBegin &&
+      type != blink::WebInputEvent::TouchStart &&
+      type != blink::WebInputEvent::RawKeyDown)
+    return;
+
   // Ignore unless the widget is currently in the frame tree.
   if (!HasMatchingWidgetHost(&frame_tree_, render_widget_host))
     return;
 
-  for (auto& observer : observers_)
-    observer.DidGetUserInteraction(type);
+  if (type != blink::WebInputEvent::GestureScrollBegin)
+    last_interactive_input_event_time_ = ui::EventTimeForNow();
 
-  ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
-  // Exclude scroll events as user gestures for resource load dispatches.
-  // rdh is NULL in unittests.
-  if (rdh && type != blink::WebInputEvent::MouseWheel)
-    rdh->OnUserGesture();
+  OnUserInteraction(type);
 }
 
 void WebContentsImpl::FocusOwningWebContents(
@@ -5187,6 +5240,20 @@ void WebContentsImpl::OnPreferredSizeChanged(const gfx::Size& old_size) {
   const gfx::Size new_size = GetPreferredSize();
   if (new_size != old_size)
     delegate_->UpdatePreferredSize(this, new_size);
+}
+
+void WebContentsImpl::OnUserInteraction(const blink::WebInputEvent::Type type) {
+  for (auto& observer : observers_)
+    observer.DidGetUserInteraction(type);
+
+  // TODO(https://crbug.com/827659): This used to check if type != kMouseWheel.
+  // However, due to the caller already filtering event types, this would never
+  // be called with type == kMouseWheel so checking for that here is pointless.
+  // However, mouse wheel events *also* generate a kGestureScrollBegin event...
+  // which is *not* filtered out. Maybe they should be?
+  ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
+  if (rdh)  // null in unittests. =(
+    rdh->OnUserGesture();
 }
 
 std::unique_ptr<WebUIImpl> WebContentsImpl::CreateWebUI(

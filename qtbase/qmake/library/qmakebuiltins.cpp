@@ -51,6 +51,7 @@
 #ifdef PROEVALUATOR_THREAD_SAFE
 # include <qthreadpool.h>
 #endif
+#include <qversionnumber.h>
 
 #include <algorithm>
 
@@ -97,6 +98,7 @@ enum ExpandFunc {
 
 enum TestFunc {
     T_INVALID = 0, T_REQUIRES, T_GREATERTHAN, T_LESSTHAN, T_EQUALS,
+    T_VERSION_AT_LEAST, T_VERSION_AT_MOST,
     T_EXISTS, T_EXPORT, T_CLEAR, T_UNSET, T_EVAL, T_CONFIG, T_SYSTEM,
     T_DEFINED, T_DISCARD_FROM, T_CONTAINS, T_INFILE,
     T_COUNT, T_ISEMPTY, T_PARSE_JSON, T_INCLUDE, T_LOAD, T_DEBUG, T_LOG, T_MESSAGE, T_WARNING, T_ERROR, T_IF,
@@ -170,6 +172,8 @@ void QMakeEvaluator::initFunctionStatics()
         { "lessThan", T_LESSTHAN },
         { "equals", T_EQUALS },
         { "isEqual", T_EQUALS },
+        { "versionAtLeast", T_VERSION_AT_LEAST },
+        { "versionAtMost", T_VERSION_AT_MOST },
         { "exists", T_EXISTS },
         { "export", T_EXPORT },
         { "clear", T_CLEAR },
@@ -1174,7 +1178,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinExpand(
             evalError(fL1S("absolute_path(path[, base]) requires one or two arguments."));
         } else {
             QString arg = args.at(0).toQString(m_tmp1);
-            QString baseDir = args.count() > 1 ? args.at(1).toQString(m_tmp2) : currentDirectory();
+            QString baseDir = args.count() > 1
+                    ? IoUtils::resolvePath(currentDirectory(), args.at(1).toQString(m_tmp2))
+                    : currentDirectory();
             QString rstr = arg.isEmpty() ? baseDir : IoUtils::resolvePath(baseDir, arg);
             ret << (rstr.isSharedWith(m_tmp1)
                         ? args.at(0)
@@ -1188,7 +1194,9 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinExpand(
             evalError(fL1S("relative_path(path[, base]) requires one or two arguments."));
         } else {
             QString arg = args.at(0).toQString(m_tmp1);
-            QString baseDir = args.count() > 1 ? args.at(1).toQString(m_tmp2) : currentDirectory();
+            QString baseDir = args.count() > 1
+                    ? IoUtils::resolvePath(currentDirectory(), args.at(1).toQString(m_tmp2))
+                    : currentDirectory();
             QString absArg = arg.isEmpty() ? baseDir : IoUtils::resolvePath(baseDir, arg);
             QString rstr = QDir(baseDir).relativeFilePath(absArg);
             ret << (rstr.isSharedWith(m_tmp1) ? args.at(0) : ProString(rstr).setSource(args.at(0)));
@@ -1537,6 +1545,19 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateBuiltinConditional(
         }
         return returnBool(values(map(args.at(0))).join(statics.field_sep)
                           == args.at(1).toQStringRef());
+    case T_VERSION_AT_LEAST:
+    case T_VERSION_AT_MOST: {
+        if (args.count() != 2) {
+            evalError(fL1S("%1(variable, versionNumber) requires two arguments.")
+                      .arg(function.toQString(m_tmp1)));
+            return ReturnFalse;
+        }
+        const QVersionNumber lvn = QVersionNumber::fromString(values(args.at(0).toKey()).join('.'));
+        const QVersionNumber rvn = QVersionNumber::fromString(args.at(1).toQString());
+        if (func_t == T_VERSION_AT_LEAST)
+            return returnBool(lvn >= rvn);
+        return returnBool(lvn <= rvn);
+    }
     case T_CLEAR: {
         if (args.count() != 1) {
             evalError(fL1S("%1(variable) requires one argument.")

@@ -82,18 +82,18 @@ public:
         GlesMask                = Gles | AngleBackendMask,
         SoftwareRasterizer      = 0x0020,
         RendererMask            = 0x00FF,
-        DisableRotationFlag     = 0x0100
+        DisableRotationFlag     = 0x0100,
+        DisableProgramCacheFlag = 0x0200
     };
     Q_DECLARE_FLAGS(Renderers, Renderer)
 
     static Renderer requestedGlesRenderer();
     static Renderer requestedRenderer();
 
-    static Renderers supportedGlesRenderers();
-    static Renderers supportedRenderers();
+    static QWindowsOpenGLTester::Renderers  supportedRenderers(Renderer requested);
 
 private:
-    static QWindowsOpenGLTester::Renderers detectSupportedRenderers(const GpuDescription &gpu, bool glesOnly);
+    static Renderers detectSupportedRenderers(const GpuDescription &gpu, Renderer requested);
     static bool testDesktopGL();
 };
 

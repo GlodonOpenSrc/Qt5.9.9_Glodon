@@ -2959,8 +2959,17 @@ blink::BlameContext* RenderFrameImpl::frameBlameContext() {
 
 blink::WebServiceWorkerProvider*
 RenderFrameImpl::createServiceWorkerProvider() {
+  // Bail-out if we are about to be navigated away.
+  // We check that DocumentLoader is attached since:
+  // - This serves as the signal since the DocumentLoader is detached in
+  //   FrameLoader::PrepareForCommit().
+  // - Creating ServiceWorkerProvider in
+  //   RenderFrameImpl::CreateServiceWorkerProvider() assumes that there is a
+  //   DocumentLoader attached to the frame.
+  if (!frame_->dataSource())
+    return nullptr;
+
   // At this point we should have non-null data source.
-  DCHECK(frame_->dataSource());
   if (!ChildThreadImpl::current())
     return nullptr;  // May be null in some tests.
   ServiceWorkerNetworkProvider* provider =
@@ -5658,8 +5667,12 @@ void RenderFrameImpl::OnFindMatchRects(int current_version) {
 void RenderFrameImpl::OnSelectPopupMenuItem(int selected_index) {
   if (external_popup_menu_ == NULL)
     return;
-  external_popup_menu_->DidSelectItem(selected_index);
-  external_popup_menu_.reset();
+  // We need to reset |external_popup_menu_| before calling DidSelectItem(),
+  // which might delete |this|.
+  // See ExternalPopupMenuRemoveTest.RemoveFrameOnChange
+  std::unique_ptr<ExternalPopupMenu> popup;
+  popup.swap(external_popup_menu_);
+  popup->DidSelectItem(selected_index);
 }
 #else
 void RenderFrameImpl::OnSelectPopupMenuItems(
@@ -5672,8 +5685,12 @@ void RenderFrameImpl::OnSelectPopupMenuItems(
   if (!external_popup_menu_)
     return;
 
-  external_popup_menu_->DidSelectItems(canceled, selected_indices);
-  external_popup_menu_.reset();
+  // We need to reset |external_popup_menu_| before calling DidSelectItems(),
+  // which might delete |this|.
+  // See ExternalPopupMenuRemoveTest.RemoveFrameOnChange
+  std::unique_ptr<ExternalPopupMenu> popup;
+  popup.swap(external_popup_menu_);
+  popup->DidSelectItems(canceled, selected_indices);
 }
 #endif
 #endif
@@ -6565,6 +6582,10 @@ blink::WebPageVisibilityState RenderFrameImpl::GetVisibilityState() const {
 
 bool RenderFrameImpl::IsBrowserSideNavigationPending() {
   return browser_side_navigation_pending_;
+}
+
+void RenderFrameImpl::FrameDidCallFocus() {
+  Send(new FrameHostMsg_FrameDidCallFocus(routing_id_));
 }
 
 blink::WebPlugin* RenderFrameImpl::GetWebPluginForFind() {

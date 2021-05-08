@@ -357,9 +357,8 @@ qreal QQmlDataBlob::progress() const
 
 /*!
 Returns the physical url of the data.  Initially this is the same as
-finalUrl(), but if a network redirect happens while fetching the data, this url
-is updated to reflect the new location. Also, if a URL interceptor is set, it
-will work on this URL and leave finalUrl() alone.
+finalUrl(), but if a URL interceptor is set, it will work on this URL
+and leave finalUrl() alone.
 
 \sa finalUrl()
 */
@@ -380,8 +379,12 @@ QString QQmlDataBlob::urlString() const
 Returns the logical URL to be used for resolving further URLs referred to in
 the code.
 
-This is the blob url passed to the constructor.  If a network redirect
-happens while fetching the data, this url remains the same.
+This is the blob url passed to the constructor. If a URL interceptor rewrites
+the URL, this one stays the same. If a network redirect happens while fetching
+the data, this url is updated to reflect the new location. Therefore, if both
+an interception and a redirection happen, the final url will indirectly
+incorporate the result of the interception, potentially breaking further
+lookups.
 
 \sa url()
 */
@@ -1195,15 +1198,15 @@ void QQmlTypeLoader::networkReplyFinished(QNetworkReply *reply)
         QVariant redirect = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
         if (redirect.isValid()) {
             QUrl url = reply->url().resolved(redirect.toUrl());
-            blob->m_url = url;
-            blob->m_urlString.clear();
+            blob->m_finalUrl = url;
+            blob->m_finalUrlString.clear();
 
             QNetworkReply *reply = m_thread->networkAccessManager()->get(QNetworkRequest(url));
             QObject *nrp = m_thread->networkReplyProxy();
             QObject::connect(reply, SIGNAL(finished()), nrp, SLOT(finished()));
             m_networkReplies.insert(reply, blob);
 #ifdef DATABLOB_DEBUG
-            qWarning("QQmlDataBlob: redirected to %s", qPrintable(blob->urlString()));
+            qWarning("QQmlDataBlob: redirected to %s", qPrintable(blob->finalUrlString()));
 #endif
             return;
         }
@@ -1379,8 +1382,8 @@ bool QQmlTypeLoader::Blob::updateQmldir(QQmlQmldirData *data, const QV4::Compile
     if (!importQualifier.isEmpty()) {
         // Does this library contain any qualified scripts?
         QUrl libraryUrl(qmldirUrl);
-        const QQmlTypeLoaderQmldirContent *qmldir = typeLoader()->qmldirContent(qmldirIdentifier);
-        const auto qmldirScripts = qmldir->scripts();
+        const QQmlTypeLoaderQmldirContent qmldir = typeLoader()->qmldirContent(qmldirIdentifier);
+        const auto qmldirScripts = qmldir.scripts();
         for (const QQmlDirParser::Script &script : qmldirScripts) {
             QUrl scriptUrl = libraryUrl.resolved(QUrl(script.fileName));
             QQmlScriptBlob *blob = typeLoader()->getScript(scriptUrl);
@@ -1427,8 +1430,8 @@ bool QQmlTypeLoader::Blob::addImport(const QV4::CompiledData::Import *import, QL
             if (!importQualifier.isEmpty()) {
                 // Does this library contain any qualified scripts?
                 QUrl libraryUrl(qmldirUrl);
-                const QQmlTypeLoaderQmldirContent *qmldir = typeLoader()->qmldirContent(qmldirFilePath);
-                const auto qmldirScripts = qmldir->scripts();
+                const QQmlTypeLoaderQmldirContent qmldir = typeLoader()->qmldirContent(qmldirFilePath);
+                const auto qmldirScripts = qmldir.scripts();
                 for (const QQmlDirParser::Script &script : qmldirScripts) {
                     QUrl scriptUrl = libraryUrl.resolved(QUrl(script.fileName));
                     QQmlScriptBlob *blob = typeLoader()->getScript(scriptUrl);
@@ -1593,6 +1596,7 @@ QString QQmlTypeLoaderQmldirContent::typeNamespace() const
 
 void QQmlTypeLoaderQmldirContent::setContent(const QString &location, const QString &content)
 {
+    m_hasContent = true;
     m_location = location;
     m_parser.parse(content);
 }
@@ -1815,6 +1819,7 @@ QString QQmlTypeLoader::absoluteFilePath(const QString &path)
     int lastSlash = path.lastIndexOf(QLatin1Char('/'));
     QString dirPath(path.left(lastSlash));
 
+    LockHolder<QQmlTypeLoader> holder(this);
     if (!m_importDirCache.contains(dirPath)) {
         bool exists = QDir(dirPath).exists();
         QCache<QString, bool> *entry = exists ? new QCache<QString, bool> : 0;
@@ -1878,6 +1883,7 @@ bool QQmlTypeLoader::directoryExists(const QString &path)
         --length;
     QString dirPath(path.left(length));
 
+    LockHolder<QQmlTypeLoader> holder(this);
     if (!m_importDirCache.contains(dirPath)) {
         bool exists = QDir(dirPath).exists();
         QCache<QString, bool> *files = exists ? new QCache<QString, bool> : 0;
@@ -1896,8 +1902,10 @@ Return a QQmlTypeLoaderQmldirContent for absoluteFilePath.  The QQmlTypeLoaderQm
 
 It can also be a remote path for a remote directory import, but it will have been cached by now in this case.
 */
-const QQmlTypeLoaderQmldirContent *QQmlTypeLoader::qmldirContent(const QString &filePathIn)
+const QQmlTypeLoaderQmldirContent QQmlTypeLoader::qmldirContent(const QString &filePathIn)
 {
+    LockHolder<QQmlTypeLoader> holder(this);
+
     QString filePath;
 
     // Try to guess if filePathIn is already a URL. This is necessarily fragile, because
@@ -1911,39 +1919,39 @@ const QQmlTypeLoaderQmldirContent *QQmlTypeLoader::qmldirContent(const QString &
         filePath = filePathIn;
     } else {
         filePath = QQmlFile::urlToLocalFileOrQrc(url);
-        if (filePath.isEmpty()) // Can't load the remote here, but should be cached
-            return *(m_importQmlDirCache.value(filePathIn));
+        if (filePath.isEmpty()) { // Can't load the remote here, but should be cached
+            if (auto entry = m_importQmlDirCache.value(filePathIn))
+                return **entry;
+            else
+                return QQmlTypeLoaderQmldirContent();
+        }
     }
 
-    QQmlTypeLoaderQmldirContent *qmldir;
     QQmlTypeLoaderQmldirContent **val = m_importQmlDirCache.value(filePath);
-    if (!val) {
-        qmldir = new QQmlTypeLoaderQmldirContent;
+    if (val)
+        return **val;
+    QQmlTypeLoaderQmldirContent *qmldir = new QQmlTypeLoaderQmldirContent;
 
 #define ERROR(description) { QQmlError e; e.setDescription(description); qmldir->setError(e); }
 #define NOT_READABLE_ERROR QString(QLatin1String("module \"$$URI$$\" definition \"%1\" not readable"))
 #define CASE_MISMATCH_ERROR QString(QLatin1String("cannot load module \"$$URI$$\": File name case mismatch for \"%1\""))
 
-        QFile file(filePath);
-        if (!QQml_isFileCaseCorrect(filePath)) {
-            ERROR(CASE_MISMATCH_ERROR.arg(filePath));
-        } else if (file.open(QFile::ReadOnly)) {
-            QByteArray data = file.readAll();
-            qmldir->setContent(filePath, QString::fromUtf8(data));
-        } else {
-            ERROR(NOT_READABLE_ERROR.arg(filePath));
-        }
+    QFile file(filePath);
+    if (!QQml_isFileCaseCorrect(filePath)) {
+        ERROR(CASE_MISMATCH_ERROR.arg(filePath));
+    } else if (file.open(QFile::ReadOnly)) {
+        QByteArray data = file.readAll();
+        qmldir->setContent(filePath, QString::fromUtf8(data));
+    } else {
+        ERROR(NOT_READABLE_ERROR.arg(filePath));
+    }
 
 #undef ERROR
 #undef NOT_READABLE_ERROR
 #undef CASE_MISMATCH_ERROR
 
-        m_importQmlDirCache.insert(filePath, qmldir);
-    } else {
-        qmldir = *val;
-    }
-
-    return qmldir;
+    m_importQmlDirCache.insert(filePath, qmldir);
+    return *qmldir;
 }
 
 void QQmlTypeLoader::setQmldirContent(const QString &url, const QString &content)

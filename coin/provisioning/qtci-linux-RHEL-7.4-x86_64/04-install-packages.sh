@@ -48,7 +48,6 @@ installPackages+=(mesa-libGL-devel)
 installPackages+=(libxkbfile-devel)
 # Xinput2
 installPackages+=(libXi-devel)
-installPackages+=(python-devel)
 installPackages+=(mysql-server)
 installPackages+=(mysql)
 installPackages+=(mysql-devel)
@@ -64,8 +63,10 @@ installPackages+=(gtk3-devel)
 installPackages+=(libusbx-devel)
 # speech-dispatcher-devel for QtSpeech, otherwise it has no backend on Linux
 installPackages+=(speech-dispatcher-devel)
-# Python
-installPackages+=(python-devel python-virtualenv)
+# Python 2 devel and pip. python-pip requires the EPEL repository to be added
+installPackages+=(python-devel python-pip)
+# Python 3 with python-devel, pip and virtualenv
+installPackages+=(rh-python36)
 # WebEngine
 installPackages+=(bison)
 installPackages+=(flex)
@@ -84,5 +85,11 @@ installPackages+=(glibc.i686)
 # Enable Qt Bluetooth
 installPackages+=(bluez-libs-devel)
 
-sudo yum -y update
 sudo yum -y install "${installPackages[@]}"
+
+sudo ln -s /opt/rh/rh-python36/root/usr/bin/python3 /usr/local/bin/python3
+sudo ln -s /opt/rh/rh-python36/root/usr/bin/pip3 /usr/local/bin/pip3
+# We shouldn't use yum to install virtualenv. The one found from package repo is not
+# working, but we can use installed pip
+sudo pip install --upgrade pip
+sudo pip install virtualenv

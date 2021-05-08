@@ -35,6 +35,9 @@
 
 Q_DECLARE_LOGGING_CATEGORY(qlcVirtualKeyboard)
 
+// See config.pri for SENSITIVE_DEBUG.
+
 #define VIRTUALKEYBOARD_DEBUG() qCDebug(qlcVirtualKeyboard)
+#define VIRTUALKEYBOARD_WARN() qCWarning(qlcVirtualKeyboard)
 
 #endif // VIRTUALKEYBOARDDEBUG_H

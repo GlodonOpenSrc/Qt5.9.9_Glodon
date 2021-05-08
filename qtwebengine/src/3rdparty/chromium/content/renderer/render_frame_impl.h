@@ -710,6 +710,10 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnSetPepperVolume(int32_t pp_instance, double volume);
 #endif  // ENABLE_PLUGINS
 
+  // Called to notify a frame that it called |window.focus()| on a different
+  // frame.
+  void FrameDidCallFocus();
+
  protected:
   explicit RenderFrameImpl(const CreateParams& params);
 
@@ -719,6 +723,7 @@ class CONTENT_EXPORT RenderFrameImpl
   friend class RenderAccessibilityImplTest;
   friend class TestRenderFrame;
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuDisplayNoneTest, SelectItem);
+  FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuRemoveTest, RemoveFrameOnChange);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuRemoveTest, RemoveOnChange);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, NormalCase);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, ShowPopupThenNavigate);

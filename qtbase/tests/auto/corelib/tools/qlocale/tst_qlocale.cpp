@@ -1666,23 +1666,23 @@ void tst_QLocale::macDefaultLocale()
 
     // Depending on the configured time zone, the time string might not
     // contain a GMT specifier. (Sometimes it just names the zone, like "CEST")
-    if (timeString.contains(QString("GMT"))) {
-        QString expectedGMTSpecifierBase("GMT");
-        if (diff >= 0)
-            expectedGMTSpecifierBase.append(QLatin1Char('+'));
-        else
-            expectedGMTSpecifierBase.append(QLatin1Char('-'));
+    QLatin1String gmt("GMT");
+    if (timeString.contains(gmt) && diff) {
+        QLatin1Char sign(diff < 0 ? '-' : '+');
+        QString number(QString::number(qAbs(diff)));
+        const QString expect = gmt + sign + number;
 
-        QString expectedGMTSpecifier = expectedGMTSpecifierBase + QString("%1").arg(qAbs(diff));
-        QString expectedGMTSpecifierZeroExtended = expectedGMTSpecifierBase + QString("0%1").arg(qAbs(diff));
+        if (diff < 10) {
+            const QString zeroed = gmt + sign + QLatin1Char('0') + number;
 
-        QVERIFY2(timeString.contains(expectedGMTSpecifier)
-            || timeString.contains(expectedGMTSpecifierZeroExtended),
-            qPrintable(QString("timeString `%1', expectedGMTSpecifier `%2' or `%3'")
-            .arg(timeString)
-            .arg(expectedGMTSpecifier)
-            .arg(expectedGMTSpecifierZeroExtended)
-        ));
+            QVERIFY2(timeString.contains(expect) || timeString.contains(zeroed),
+                     qPrintable(QString("timeString `%1', expected GMT specifier `%2' or `%3'")
+                                .arg(timeString).arg(expect).arg(zeroed)));
+        } else {
+            QVERIFY2(timeString.contains(expect),
+                     qPrintable(QString("timeString `%1', expected GMT specifier `%2'")
+                                .arg(timeString).arg(expect)));
+        }
     }
     QCOMPARE(locale.dayName(1), QString("Monday"));
     QCOMPARE(locale.dayName(7), QString("Sunday"));
@@ -2203,9 +2203,9 @@ void tst_QLocale::timeFormat()
     QCOMPARE(c.timeFormat(QLocale::NarrowFormat), c.timeFormat(QLocale::ShortFormat));
 
     const QLocale no("no_NO");
-    QCOMPARE(no.timeFormat(QLocale::NarrowFormat), QLatin1String("HH.mm"));
-    QCOMPARE(no.timeFormat(QLocale::ShortFormat), QLatin1String("HH.mm"));
-    QCOMPARE(no.timeFormat(QLocale::LongFormat), QLatin1String("HH.mm.ss t"));
+    QCOMPARE(no.timeFormat(QLocale::NarrowFormat), QLatin1String("HH:mm"));
+    QCOMPARE(no.timeFormat(QLocale::ShortFormat), QLatin1String("HH:mm"));
+    QCOMPARE(no.timeFormat(QLocale::LongFormat), QLatin1String("HH:mm:ss t"));
 
     const QLocale id("id_ID");
     QCOMPARE(id.timeFormat(QLocale::ShortFormat), QLatin1String("HH.mm"));
@@ -2227,9 +2227,9 @@ void tst_QLocale::dateTimeFormat()
     QCOMPARE(c.dateTimeFormat(QLocale::NarrowFormat), c.dateTimeFormat(QLocale::ShortFormat));
 
     const QLocale no("no_NO");
-    QCOMPARE(no.dateTimeFormat(QLocale::NarrowFormat), QLatin1String("dd.MM.yyyy HH.mm"));
-    QCOMPARE(no.dateTimeFormat(QLocale::ShortFormat), QLatin1String("dd.MM.yyyy HH.mm"));
-    QCOMPARE(no.dateTimeFormat(QLocale::LongFormat), QLatin1String("dddd d. MMMM yyyy HH.mm.ss t"));
+    QCOMPARE(no.dateTimeFormat(QLocale::NarrowFormat), QLatin1String("dd.MM.yyyy HH:mm"));
+    QCOMPARE(no.dateTimeFormat(QLocale::ShortFormat), QLatin1String("dd.MM.yyyy HH:mm"));
+    QCOMPARE(no.dateTimeFormat(QLocale::LongFormat), QLatin1String("dddd d. MMMM yyyy HH:mm:ss t"));
 }
 
 void tst_QLocale::monthName()
@@ -2327,6 +2327,10 @@ void tst_QLocale::currency()
     QCOMPARE(de_DE.toCurrencyString(double(1234.56)), QString::fromUtf8("1.234,56\xc2\xa0\xe2\x82\xac"));
     QCOMPARE(de_DE.toCurrencyString(double(-1234.56)), QString::fromUtf8("-1.234,56\xc2\xa0\xe2\x82\xac"));
     QCOMPARE(de_DE.toCurrencyString(double(-1234.56), QLatin1String("BAZ")), QString::fromUtf8("-1.234,56\xc2\xa0" "BAZ"));
+
+    const QLocale es_CR(QLocale::Spanish, QLocale::CostaRica);
+    QCOMPARE(es_CR.toCurrencyString(double(1565.25)),
+             QString::fromUtf8("\xE2\x82\xA1" "1\xC2\xA0" "565,25"));
 
     const QLocale system = QLocale::system();
     QVERIFY(system.toCurrencyString(1, QLatin1String("FOO")).contains(QLatin1String("FOO")));

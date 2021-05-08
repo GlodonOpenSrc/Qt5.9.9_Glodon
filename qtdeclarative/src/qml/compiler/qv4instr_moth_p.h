@@ -158,6 +158,8 @@ QT_BEGIN_NAMESPACE
     F(ShlConst, shlConst) \
     F(Mul, mul) \
     F(Sub, sub) \
+    F(DoubleToInt, doubleToInt) \
+    F(DoubleToUInt, doubleToUInt) \
     F(BinopContext, binopContext) \
     F(LoadThis, loadThis) \
     F(LoadQmlContext, loadQmlContext) \
@@ -769,6 +771,16 @@ union Instr
         Param rhs;
         Param result;
     };
+    struct instr_doubleToInt {
+        MOTH_INSTR_HEADER
+        Param source;
+        Param result;
+    };
+    struct instr_doubleToUInt {
+        MOTH_INSTR_HEADER
+        Param source;
+        Param result;
+    };
     struct instr_binopContext {
         MOTH_INSTR_HEADER
         uint alu; // offset inside the runtime methods
@@ -884,6 +896,8 @@ union Instr
     instr_shlConst shlConst;
     instr_mul mul;
     instr_sub sub;
+    instr_doubleToInt doubleToInt;
+    instr_doubleToUInt doubleToUInt;
     instr_binopContext binopContext;
     instr_loadThis loadThis;
     instr_loadQmlContext loadQmlContext;
@@ -908,7 +922,7 @@ QT_WARNING_DISABLE_GCC("-Wuninitialized")
         static void setDataNoCommon(Instr &instr, const DataType &v) \
         { memcpy(reinterpret_cast<char *>(&instr.FMT) + sizeof(Instr::instr_common), \
                  reinterpret_cast<const char *>(&v) + sizeof(Instr::instr_common), \
-                 Size - sizeof(Instr::instr_common)); } \
+                 sizeof(DataType) - sizeof(Instr::instr_common)); } \
     };
 FOR_EACH_MOTH_INSTR(MOTH_INSTR_META_TEMPLATE);
 #undef MOTH_INSTR_META_TEMPLATE

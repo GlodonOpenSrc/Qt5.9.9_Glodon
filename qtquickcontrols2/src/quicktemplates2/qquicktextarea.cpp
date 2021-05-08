@@ -483,7 +483,10 @@ void QQuickTextArea::setBackground(QQuickItem *background)
     delete d->background;
     d->background = background;
     if (background) {
-        background->setParentItem(this);
+        if (d->flickable)
+            background->setParentItem(d->flickable);
+        else
+            background->setParentItem(this);
         if (qFuzzyIsNull(background->z()))
             background->setZ(-1);
         if (isComponentComplete())
@@ -636,6 +639,7 @@ void QQuickTextArea::componentComplete()
     Q_D(QQuickTextArea);
     d->executeBackground(true);
     QQuickTextEdit::componentComplete();
+    d->resizeBackground();
 #if QT_CONFIG(quicktemplates2_hover)
     if (!d->explicitHoverEnabled)
         setAcceptHoverEvents(QQuickControlPrivate::calcHoverEnabled(d->parentItem));

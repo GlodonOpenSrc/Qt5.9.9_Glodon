@@ -44,10 +44,7 @@
 
 set -ex
 
-# shellcheck source=../common/unix/try_catch.sh
-source "${BASH_SOURCE%/*}/../common/unix/try_catch.sh"
-
 # shellcheck source=../common/macos/install_xcode.sh
-source "${BASH_SOURCE%/*}/../common/macos/install_xcode.sh"
+source "${BASH_SOURCE%/*}/../common/macos/install_xcode_9_orHigher.sh"
 
-InstallXCode /net/ci-files01-hki.intra.qt.io/hdd/www/input/mac/Xcode_8.3.3.xz 8.3.3
+InstallXCode /net/ci-files01-hki.intra.qt.io/hdd/www/input/mac/Xcode_9.2_updated.tar.gz 9.2

@@ -331,9 +331,9 @@ static void getFontDescription(CTFontDescriptorRef font, FontDescription *fd)
 
     if (styles) {
         if (CFNumberRef weightValue = (CFNumberRef) CFDictionaryGetValue(styles, kCTFontWeightTrait)) {
-            float normalizedWeight;
-            if (CFNumberGetValue(weightValue, kCFNumberFloatType, &normalizedWeight))
-                fd->weight = QCoreTextFontEngine::qtWeightFromCFWeight(normalizedWeight);
+            double normalizedWeight;
+            if (CFNumberGetValue(weightValue, kCFNumberFloat64Type, &normalizedWeight))
+                fd->weight = QCoreTextFontEngine::qtWeightFromCFWeight(float(normalizedWeight));
         }
         if (CFNumberRef italic = (CFNumberRef) CFDictionaryGetValue(styles, kCTFontSlantTrait)) {
             double d;
@@ -451,16 +451,15 @@ QFontEngine *QCoreTextFontDatabaseEngineFactory<QFontEngineFT>::fontEngine(const
 {
     CTFontDescriptorRef descriptor = static_cast<CTFontDescriptorRef>(usrPtr);
 
-    if (NSURL *url = descriptorAttribute<NSURL>(descriptor, kCTFontURLAttribute)) {
+    if (NSValue *fontDataValue = descriptorAttribute<NSValue>(descriptor, (CFStringRef)kQtFontDataAttribute)) {
+        QByteArray *fontData = static_cast<QByteArray *>(fontDataValue.pointerValue);
+        return QFontEngineFT::create(*fontData, fontDef.pixelSize,
+            static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
+    } else if (NSURL *url = descriptorAttribute<NSURL>(descriptor, kCTFontURLAttribute)) {
         Q_ASSERT(url.fileURL);
         QFontEngine::FaceId faceId;
         faceId.filename = QString::fromNSString(url.path).toUtf8();
         return QFontEngineFT::create(fontDef, faceId);
-
-    } else if (NSValue *fontDataValue = descriptorAttribute<NSValue>(descriptor, (CFStringRef)kQtFontDataAttribute)) {
-        QByteArray *fontData = static_cast<QByteArray *>(fontDataValue.pointerValue);
-        return QFontEngineFT::create(*fontData, fontDef.pixelSize,
-            static_cast<QFont::HintingPreference>(fontDef.hintingPreference));
     }
     Q_UNREACHABLE();
 }

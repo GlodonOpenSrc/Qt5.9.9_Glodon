@@ -132,13 +132,16 @@ void QWaylandEglWindow::updateSurface(bool create)
 
                 m_resize = true;
             }
-        } else if (create) {
-            m_waylandEglWindow = wl_egl_window_create(object(), sizeWithMargins.width(), sizeWithMargins.height());
+        } else if (create && wl_surface::isInitialized()) {
+            ::wl_surface *wlSurface = wl_surface::object();
+            m_waylandEglWindow = wl_egl_window_create(wlSurface, sizeWithMargins.width(), sizeWithMargins.height());
         }
 
-        if (!m_eglSurface && create) {
+        if (!m_eglSurface && m_waylandEglWindow && create) {
             EGLNativeWindowType eglw = (EGLNativeWindowType) m_waylandEglWindow;
             m_eglSurface = eglCreateWindowSurface(m_clientBufferIntegration->eglDisplay(), m_eglConfig, eglw, 0);
+            if (Q_UNLIKELY(m_eglSurface == EGL_NO_SURFACE))
+                qWarning("QtWayland: Could not create EGL surface (EGL error 0x%x)\n", eglGetError());
         }
     }
 }
@@ -159,12 +162,6 @@ void QWaylandEglWindow::setVisible(bool visible)
 {
     QWaylandWindow::setVisible(visible);
     if (!visible)
-        QMetaObject::invokeMethod(this, "doInvalidateSurface", Qt::QueuedConnection);
-}
-
-void QWaylandEglWindow::doInvalidateSurface()
-{
-    if (!window()->isVisible())
         invalidateSurface();
 }
 

@@ -669,6 +669,17 @@ static QPair<QLibrary*, QLibrary*> loadOpenSsl()
     // reason, we will search a few common paths (see findAllLibSsl() above) in hopes
     // we find one that works.
     //
+    // If that fails, for OpenSSL 1.0 we also try some fallbacks -- look up
+    // libssl.so with a hardcoded soname. The reason is QTBUG-68156: the binary
+    // builds of Qt happen (at the time of this writing) on RHEL machines,
+    // which change SHLIB_VERSION_NUMBER to a non-portable string. When running
+    // those binaries on the target systems, this code won't pick up
+    // libssl.so.MODIFIED_SHLIB_VERSION_NUMBER because it doesn't exist there.
+    // Given that the only 1.0 supported release (at the time of this writing)
+    // is 1.0.2, with soname "1.0.0", give that a try too. Note that we mandate
+    // OpenSSL >= 1.0.0 with a configure-time check, and OpenSSL has kept binary
+    // compatibility between 1.0.0 and 1.0.2.
+    //
     // It is important, however, to try the canonical name and the unversioned name
     // without going through the loop. By not specifying a path, we let the system
     // dlopen(3) function determine it for us. This will include any DT_RUNPATH or
@@ -688,6 +699,25 @@ static QPair<QLibrary*, QLibrary*> loadOpenSsl()
     } else {
         libssl->unload();
         libcrypto->unload();
+    }
+
+    // first-and-half attempts: for OpenSSL 1.0 try to load some hardcoded sonames:
+    // - "1.0.0" is the official upstream one
+    // - "1.0.2" is found on some distributions (e.g. Debian) that patch OpenSSL
+    static const QLatin1String fallbackSonames[] = {
+        QLatin1String("1.0.0"),
+        QLatin1String("1.0.2")
+    };
+
+    for (auto fallbackSoname : fallbackSonames) {
+        libssl->setFileNameAndVersion(QLatin1String("ssl"), fallbackSoname);
+        libcrypto->setFileNameAndVersion(QLatin1String("crypto"), fallbackSoname);
+        if (libcrypto->load() && libssl->load()) {
+            return pair;
+        } else {
+            libssl->unload();
+            libcrypto->unload();
+        }
     }
 #endif
 

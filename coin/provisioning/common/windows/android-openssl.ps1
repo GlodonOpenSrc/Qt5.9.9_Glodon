@@ -39,31 +39,41 @@
 # Msys need to be installed to target machine
 # More info and building instructions can be found from http://doc.qt.io/qt-5/opensslsupport.html
 
-$version = "1.0.2j"
-$zip = "c:\users\qt\downloads\openssl-$version.tar.gz"
-$sha1 = "bdfbdb416942f666865fa48fe13c2d0e588df54f"
-$destination = "C:\Utils\openssl-android-master"
+# Android openssl was preconfigured manually. More info in jira ticket  https://bugreports.qt.io/browse/QTQAINFRA-3258
+# Android openssl was configured with following way and cached to ci-files01-hki.intra.qt.io\provisioning\openssl\.
+#################################################################
+## $version = "1.0.2p"
+## $zip = "c:\users\qt\downloads\openssl-$version.tar.gz"
+## $sha1 = "f34b5322e92415755c7d58bf5d0d5cf37666382c"
+## $destination = "C:\Utils\openssl-android-master"
+## Download https://www.openssl.org/source/openssl-$version.tar.gz \\ci-files01-hki.intra.qt.io\provisioning\openssl\openssl-$version.tar.gz $zip
+## Verify-Checksum $zip $sha1
+## Extract-7Zip $zip C:\Utils
+## Extract-7Zip C:\Utils\openssl-$version.tar C:\Utils
+## Rename-Item C:\Utils\openssl-$version $destination
+## Remove-Item -Path $zip
+## Remove-Item C:\Utils\openssl-$version.tar
+## Set-EnvironmentVariable "CC" "C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-gcc"
+## Set-EnvironmentVariable "AR" "C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-ar"
+## Set-EnvironmentVariable "ANDROID_DEV" "C:\utils\android-ndk-r10e\platforms\android-18\arch-arm\usr"
+### Make sure configure for openssl has a "make" and "perl" available
+## $env:PATH = $env:PATH + ";C:\msys\1.0\bin;C:\strawberry\perl\bin"
+## Write-Host "Configuring OpenSSL $version for Android..."
+## Push-Location $destination
+## Run-Executable "C:\msys\1.0\bin\bash.exe" "-c `"c:/strawberry/perl/bin/perl Configure shared android`""
+## Pop-Location
+### Following command is needed when using version 1.1.0. With version 1.1.0 msys is not needed.
+## C:\mingw530\bin\mingw32-make.exe include\openssl\opensslconf.h
+#################################################################
 
-Download https://www.openssl.org/source/openssl-$version.tar.gz \\ci-files01-hki.intra.qt.io\provisioning\openssl\openssl-$version.tar.gz $zip
+Set-EnvironmentVariable "CC" "C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-gcc"
+Set-EnvironmentVariable "AR" "C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-ar"
+Set-EnvironmentVariable "ANDROID_DEV" "C:\utils\android-ndk-r10e\platforms\android-18\arch-arm\usr"
+
+$version = "1.0.2t"
+$zip = "c:\users\qt\downloads\openssl-$version.7z"
+$sha1 = "6670ff13906a04fdbfe0fcbc075ff21839dca984"
+Download \\ci-files01-hki.intra.qt.io\provisioning\openssl\openssl-android-master_$version.7z \\ci-files01-hki.intra.qt.io\provisioning\openssl\openssl-android-master_$version.7z $zip
 Verify-Checksum $zip $sha1
-
-C:\Utils\sevenzip\7z.exe x $zip -oC:\Utils
-C:\Utils\sevenzip\7z.exe x C:\Utils\openssl-$version.tar -oC:\Utils
-Rename-Item C:\Utils\openssl-$version $destination
-Remove-Item $zip
-Remove-Item C:\Utils\openssl-$version.tar
-
-set CC=C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-gcc
-set AR=C:\utils\android-ndk-r10e\toolchains\arm-linux-androideabi-4.9\prebuilt\windows\bin\arm-linux-androideabi-ar
-set ANDROID_DEV=C:\utils\android-ndk-r10e\platforms\android-18\arch-arm\usr
-
-# Make sure configure for openssl has a "make" and "perl" available
-$env:PATH = $env:PATH + ";C:\msys\1.0\bin;C:\strawberry\perl\bin"
-
-echo "Configuring OpenSSL $version for Android..."
-pushd $destination
-C:\msys\1.0\bin\bash.exe -c "c:/strawberry/perl/bin/perl Configure shared android"
-popd
-
-# Following command is needed when using version 1.1.0. With version 1.1.0 msys is not needed.
-# C:\mingw530\bin\mingw32-make.exe include\openssl\opensslconf.h
+Extract-7Zip $zip C:\Utils
+Remove-Item -Path $zip

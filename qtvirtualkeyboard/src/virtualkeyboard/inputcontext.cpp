@@ -449,7 +449,11 @@ void InputContext::sendKeyClick(int key, const QString &text, int modifiers)
     if (d->focus && d->inputContext) {
         QKeyEvent pressEvent(QEvent::KeyPress, key, Qt::KeyboardModifiers(modifiers), text);
         QKeyEvent releaseEvent(QEvent::KeyRelease, key, Qt::KeyboardModifiers(modifiers), text);
-        VIRTUALKEYBOARD_DEBUG() << "InputContext::::sendKeyClick():" << key;
+        VIRTUALKEYBOARD_DEBUG().nospace() << "InputContext::sendKeyClick()"
+#ifdef SENSITIVE_DEBUG
+            << ": " << key
+#endif
+        ;
 
         d->stateFlags |= InputContextPrivate::KeyEventState;
         d->inputContext->sendKeyEvent(&pressEvent);
@@ -457,7 +461,11 @@ void InputContext::sendKeyClick(int key, const QString &text, int modifiers)
         if (d->activeKeys.isEmpty())
             d->stateFlags &= ~InputContextPrivate::KeyEventState;
     } else {
-        qWarning() << "InputContext::::sendKeyClick():" << key << "no focus";
+        VIRTUALKEYBOARD_WARN() << "InputContext::sendKeyClick(): no focus to send key click"
+#ifdef SENSITIVE_DEBUG
+            << key << text
+#endif
+            << "- QGuiApplication::focusWindow() is:" << QGuiApplication::focusWindow();
     }
 }
 
@@ -497,7 +505,11 @@ void InputContext::commit()
 void InputContext::commit(const QString &text, int replaceFrom, int replaceLength)
 {
     Q_D(InputContext);
-    VIRTUALKEYBOARD_DEBUG() << "InputContext::commit():" << text << replaceFrom << replaceLength;
+    VIRTUALKEYBOARD_DEBUG() << "InputContext::commit()"
+#ifdef SENSITIVE_DEBUG
+           << text << replaceFrom << replaceLength
+#endif
+        ;
     bool preeditChanged = !d->preeditText.isEmpty();
     d->preeditText.clear();
     d->preeditTextAttributes.clear();
@@ -666,7 +678,11 @@ void InputContext::setFocus(bool enable)
 void InputContext::sendPreedit(const QString &text, const QList<QInputMethodEvent::Attribute> &attributes, int replaceFrom, int replaceLength)
 {
     Q_D(InputContext);
-    VIRTUALKEYBOARD_DEBUG() << "InputContext::sendPreedit():" << text << replaceFrom << replaceLength;
+    VIRTUALKEYBOARD_DEBUG() << "InputContext::sendPreedit()"
+#ifdef SENSITIVE_DEBUG
+           << text << replaceFrom << replaceLength
+#endif
+        ;
 
     bool textChanged = d->preeditText != text;
     bool attributesChanged = d->preeditTextAttributes != attributes;
@@ -689,7 +705,11 @@ void InputContext::sendPreedit(const QString &text, const QList<QInputMethodEven
             // input may be out of sync.
             if (d->shadow.inputItem() && !replace && !text.isEmpty() &&
                     !textChanged && attributesChanged) {
-                VIRTUALKEYBOARD_DEBUG() << "InputContext::sendPreedit(shadow):" << text << replaceFrom << replaceLength;
+                VIRTUALKEYBOARD_DEBUG() << "InputContext::sendPreedit(shadow)"
+#ifdef SENSITIVE_DEBUG
+                       << text << replaceFrom << replaceLength
+#endif
+                    ;
                 event.setAccepted(true);
                 QGuiApplication::sendEvent(d->shadow.inputItem(), &event);
             }

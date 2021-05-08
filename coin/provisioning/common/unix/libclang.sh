@@ -52,7 +52,7 @@ if [ $# -eq 0 ]
     # The default values are for macOS package
     echo "Using macOS defaults"
     version=$libclang_version
-    url="https://download.qt.io/development_releases/prebuilt/libclang/libclang-release_${version//\./}-mac.7z"
+    url="http://ci-files01-hki.intra.qt.io/input/libclang/qt/libclang-release_${version//\./}-mac.7z"
     sha1="4781d154b274b2aec99b878c364f0ea80ff00a80"
 fi
 
@@ -60,12 +60,7 @@ zip="libclang.7z"
 destination="/usr/local/libclang-$version"
 
 curl --fail -L --retry 5 --retry-delay 5 -o "$zip" "$url"
-_shasum=sha1sum
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "DARWIN"
-    _shasum=/usr/bin/shasum
-fi
-echo "$sha1  $zip" | $_shasum --check
+echo "$sha1  $zip" | sha1sum --check
 7z x $zip -o/tmp/
 rm -rf $zip
 

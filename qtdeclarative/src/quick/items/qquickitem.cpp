@@ -1808,10 +1808,10 @@ void QQuickItemPrivate::updateSubFocusItem(QQuickItem *scope, bool focus)
 
     \section1 Custom Scene Graph Items
 
-    All visual QML items are rendered using the scene graph, a
-    low-level, high-performance rendering stack, closely tied to
-    OpenGL. It is possible for subclasses of QQuickItem to add their
-    own custom content into the scene graph by setting the
+    All visual QML items are rendered using the scene graph, the default
+    implementation of which is a low-level, high-performance rendering stack,
+    closely tied to OpenGL. It is possible for subclasses of QQuickItem to add
+    their own custom content into the scene graph by setting the
     QQuickItem::ItemHasContents flag and reimplementing the
     QQuickItem::updatePaintNode() function.
 
@@ -3121,6 +3121,9 @@ void QQuickItemPrivate::itemToParentTransform(QTransform &t) const
 */
 QTransform QQuickItemPrivate::windowToGlobalTransform() const
 {
+    if (Q_UNLIKELY(window == nullptr))
+        return QTransform();
+
     QPoint quickWidgetOffset;
     QWindow *renderWindow = QQuickRenderControl::renderWindowFor(window, &quickWidgetOffset);
     QPointF pos = (renderWindow ? renderWindow : window)->mapToGlobal(quickWidgetOffset);
@@ -3132,6 +3135,9 @@ QTransform QQuickItemPrivate::windowToGlobalTransform() const
 */
 QTransform QQuickItemPrivate::globalToWindowTransform() const
 {
+    if (Q_UNLIKELY(window == nullptr))
+        return QTransform();
+
     QPoint quickWidgetOffset;
     QWindow *renderWindow = QQuickRenderControl::renderWindowFor(window, &quickWidgetOffset);
     QPointF pos = (renderWindow ? renderWindow : window)->mapToGlobal(quickWidgetOffset);

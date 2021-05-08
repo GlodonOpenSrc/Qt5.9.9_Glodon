@@ -13,6 +13,7 @@
 #include "SkPathPriv.h"
 #include "SkPathRef.h"
 #include "SkRRect.h"
+#include "SkTLazy.h"
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -711,9 +712,11 @@ void SkPath::setConvexity(Convexity c) {
         fFirstDirection = SkPathPriv::kUnknown_FirstDirection;  \
     } while (0)
 
-void SkPath::incReserve(U16CPU inc) {
+void SkPath::incReserve(int inc) {
     SkDEBUGCODE(this->validate();)
-    SkPathRef::Editor(&fPathRef, inc, inc);
+    if (inc > 0) {
+        SkPathRef::Editor(&fPathRef, inc, inc);
+    }
     SkDEBUGCODE(this->validate();)
 }
 
@@ -1502,10 +1505,18 @@ void SkPath::addPath(const SkPath& path, SkScalar dx, SkScalar dy, AddPathMode m
     this->addPath(path, matrix, mode);
 }
 
-void SkPath::addPath(const SkPath& path, const SkMatrix& matrix, AddPathMode mode) {
-    SkPathRef::Editor(&fPathRef, path.countVerbs(), path.countPoints());
+void SkPath::addPath(const SkPath& srcPath, const SkMatrix& matrix, AddPathMode mode) {
+    // Detect if we're trying to add ourself
+    const SkPath* src = &srcPath;
+    SkTLazy<SkPath> tmp;
+    if (this == src) {
+        src = tmp.set(srcPath);
+    }
 
-    RawIter iter(path);
+    SkPathRef::Editor(&fPathRef, src->countVerbs(), src->countPoints());
+
+
+    RawIter iter(*src);
     SkPoint pts[4];
     Verb    verb;
 
@@ -1605,14 +1616,21 @@ void SkPath::reversePathTo(const SkPath& path) {
     }
 }
 
-void SkPath::reverseAddPath(const SkPath& src) {
-    SkPathRef::Editor ed(&fPathRef, src.fPathRef->countPoints(), src.fPathRef->countVerbs());
+void SkPath::reverseAddPath(const SkPath& srcPath) {
+    // Detect if we're trying to add ourself
+    const SkPath* src = &srcPath;
+    SkTLazy<SkPath> tmp;
+    if (this == src) {
+        src = tmp.set(srcPath);
+    }
 
-    const SkPoint* pts = src.fPathRef->pointsEnd();
+    SkPathRef::Editor ed(&fPathRef, src->fPathRef->countPoints(), src->fPathRef->countVerbs());
+
+    const SkPoint* pts = src->fPathRef->pointsEnd();
     // we will iterator through src's verbs backwards
-    const uint8_t* verbs = src.fPathRef->verbsMemBegin(); // points at the last verb
-    const uint8_t* verbsEnd = src.fPathRef->verbs(); // points just past the first verb
-    const SkScalar* conicWeights = src.fPathRef->conicWeightsEnd();
+    const uint8_t* verbs = src->fPathRef->verbsMemBegin(); // points at the last verb
+    const uint8_t* verbsEnd = src->fPathRef->verbs(); // points just past the first verb
+    const SkScalar* conicWeights = src->fPathRef->conicWeightsEnd();
 
     bool needMove = true;
     bool needClose = false;
@@ -1726,12 +1744,29 @@ void SkPath::transform(const SkMatrix& matrix, SkPath* dst) const {
         matrix.mapPoints(ed.points(), ed.pathRef()->countPoints());
         dst->fFirstDirection = SkPathPriv::kUnknown_FirstDirection;
     } else {
+        Convexity convexity = this->getConvexityOrUnknown();
+
         SkPathRef::CreateTransformedCopy(&dst->fPathRef, *fPathRef.get(), matrix);
 
         if (this != dst) {
             dst->fFillType = fFillType;
             dst->fConvexity = fConvexity;
             dst->fIsVolatile = fIsVolatile;
+        }
+
+        // Due to finite/fragile float numerics, we can't assume that a convex path remains
+        // convex after a transformation, so mark it as unknown here.
+        // However, some transformations are thought to be safe:
+        //    axis-aligned values under scale/translate.
+        //
+        // See skbug.com/8606
+        // If we can land a robust convex scan-converter, we may be able to relax/remove this
+        // check, and keep convex paths marked as such after a general transform...
+        //
+        if (matrix.isScaleTranslate() && SkPathPriv::IsAxisAligned(*this)) {
+            dst->setConvexity(convexity);
+        } else {
+            dst->setConvexity(kUnknown_Convexity);
         }
 
         if (SkPathPriv::kUnknown_FirstDirection == fFirstDirection) {

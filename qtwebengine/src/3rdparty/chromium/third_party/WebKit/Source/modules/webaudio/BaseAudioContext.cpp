@@ -157,6 +157,14 @@ void BaseAudioContext::initialize() {
 
   if (m_destinationNode) {
     m_destinationNode->handler().initialize();
+    // TODO(crbug.com/863951).  The audio thread needs some things from the
+    // destination handler like the currentTime.  But the audio thread
+    // shouldn't access the |destination_node_| since it's an Oilpan object.
+    // Thus, get the destination handler, a non-oilpan object, so we can get
+    // the items directly from the handler instead of through the destination
+    // node.
+    m_destinationHandler = &m_destinationNode->audioDestinationHandler();
+
     // The AudioParams in the listener need access to the destination node, so
     // only create the listener if the destination node exists.
     m_listener = AudioListener::create(*this);
@@ -885,6 +893,23 @@ SecurityOrigin* BaseAudioContext::getSecurityOrigin() const {
     return getExecutionContext()->getSecurityOrigin();
 
   return nullptr;
+}
+
+bool BaseAudioContext::WouldTaintOrigin(const KURL& url) const {
+  // Data URLs don't taint the origin.
+  if (url.protocolIsData()) {
+    return false;
+  }
+
+  Document* document =  toDocument(getExecutionContext());
+  if (document && document->getSecurityOrigin()) {
+    // The origin is tainted if and only if we cannot read content from the URL.
+    return !document->getSecurityOrigin()->canRequest(url);
+  }
+
+  // Be conservative and assume it's tainted if it's not a data url and if we
+  // can't get the security origin of the document.
+  return true;
 }
 
 }  // namespace blink

@@ -638,8 +638,12 @@ static bool _q_dontOverrideCtrlLMB = false;
     NSPoint screenPoint;
     if (theEvent) {
         NSPoint windowPoint = [theEvent locationInWindow];
-        NSRect screenRect = [[theEvent window] convertRectToScreen:NSMakeRect(windowPoint.x, windowPoint.y, 1, 1)];
-        screenPoint = screenRect.origin;
+        if (qIsNaN(windowPoint.x) || qIsNaN(windowPoint.y)) {
+            screenPoint = [NSEvent mouseLocation];
+        } else {
+            NSRect screenRect = [[theEvent window] convertRectToScreen:NSMakeRect(windowPoint.x, windowPoint.y, 1, 1)];
+            screenPoint = screenRect.origin;
+        }
     } else {
         screenPoint = [NSEvent mouseLocation];
     }
@@ -2080,7 +2084,11 @@ static QPoint mapWindowCoordinates(QWindow *source, QWindow *target, QPoint poin
     [nativeCursor set];
 
     // Make sure the cursor is updated correctly if the mouse does not move and window is under cursor
-    // by creating a fake move event
+    // by creating a fake move event, unless on 10.14 and later where doing so will trigger a security
+    // warning dialog. FIXME: Find a way to update the cursor without fake mouse events.
+    if (QOperatingSystemVersion::current() >= QOperatingSystemVersion(QOperatingSystemVersion::MacOS, 10, 14))
+        return;
+
     if (m_updatingDrag)
         return;
 

@@ -39,6 +39,7 @@
 
 #include "qwindowspipewriter_p.h"
 #include "qiodevice_p.h"
+#include <qscopedvaluerollback.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -112,9 +113,8 @@ void QWindowsPipeWriter::emitPendingBytesWrittenValue()
 
         emit canWrite();
         if (!inBytesWritten) {
-            inBytesWritten = true;
+            QScopedValueRollback<bool> guard(inBytesWritten, true);
             emit bytesWritten(bytes);
-            inBytesWritten = false;
         }
     }
 }

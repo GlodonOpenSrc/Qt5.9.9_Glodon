@@ -50,8 +50,8 @@
 #include <QtCore/qdebug.h>
 #endif
 
-// For q_BN_is_word.
 #include <openssl/bn.h>
+#include <openssl/dh.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -62,13 +62,6 @@ static bool isSafeDH(DH *dh)
 
     QSslSocketPrivate::ensureInitialized();
 
-    // Mark p < 1024 bits as unsafe.
-    if (q_BN_num_bits(dh->p) < 1024) {
-        return false;
-    }
-
-    if (q_DH_check(dh, &status) != 1)
-        return false;
 
     // From https://wiki.openssl.org/index.php/Diffie-Hellman_parameters:
     //
@@ -81,11 +74,39 @@ static bool isSafeDH(DH *dh)
     //     Without the test, the IETF parameters would
     //     fail validation. For details, see Diffie-Hellman
     //     Parameter Check (when g = 2, must p mod 24 == 11?).
+#if QT_CONFIG(opensslv11)
+    // Mark p < 1024 bits as unsafe.
+    if (q_DH_bits(dh) < 1024)
+        return false;
+
+    if (q_DH_check(dh, &status) != 1)
+        return false;
+
+    const BIGNUM *p = nullptr;
+    const BIGNUM *q = nullptr;
+    const BIGNUM *g = nullptr;
+    q_DH_get0_pqg(dh, &p, &q, &g);
+
+    if (q_BN_is_word(const_cast<BIGNUM *>(g), DH_GENERATOR_2)) {
+        long residue = q_BN_mod_word(p, 24);
+        if (residue == 11 || residue == 23)
+            status &= ~DH_NOT_SUITABLE_GENERATOR;
+    }
+
+#else
+    // Mark p < 1024 bits as unsafe.
+    if (q_BN_num_bits(dh->p) < 1024)
+        return false;
+
+    if (q_DH_check(dh, &status) != 1)
+        return false;
+
     if (q_BN_is_word(dh->g, DH_GENERATOR_2)) {
         long residue = q_BN_mod_word(dh->p, 24);
         if (residue == 11 || residue == 23)
             status &= ~DH_NOT_SUITABLE_GENERATOR;
     }
+#endif
 
     bad |= DH_CHECK_P_NOT_PRIME;
     bad |= DH_CHECK_P_NOT_SAFE_PRIME;

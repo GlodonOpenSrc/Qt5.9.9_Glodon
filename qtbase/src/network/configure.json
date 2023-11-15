@@ -69,13 +69,21 @@
                 {
                     "comment": "placeholder for OPENSSL_{PATH,LIBS{,_{DEBUG,RELEASE}}}",
                     "libs": "",
+                    "builds": {
+                        "debug": "",
+                        "release": ""
+                    },
                     "condition": "config.win32 && !features.shared"
                 },
                 {
                     "libs": "-lssleay32 -llibeay32",
+                    "builds": {
+                        "debug": "",
+                        "release": ""
+                    },
                     "condition": "config.win32 && features.shared"
                 },
-                { "libs": "-lssl -lcrypto", "condition": "!config.win32" }
+                { "libs": "-llibcrypto -llibssl", "condition": "!config.win32" }
             ]
         }
     },
@@ -146,6 +154,12 @@
                 ]
             },
             "use": "network"
+        },
+        "openssl11": {
+            "label": "OpenSSL v. 1.1 support",
+            "type": "compile",
+            "test": "unix/openssl11",
+            "use": "network"
         }
     },
 
@@ -212,6 +226,11 @@
             "label": "SSL",
             "condition": "config.winrt || features.securetransport || features.openssl",
             "output": [ "publicFeature", "feature" ]
+        },
+        "opensslv11": {
+            "label": "OpenSSL v. 1.1",
+            "condition": "tests.openssl11",
+            "output": ["publicFeature", "feature"]
         },
         "sctp": {
             "label": "SCTP",
@@ -327,6 +346,7 @@ For example:
                 },
                 "openssl",
                 "openssl-linked",
+                "opensslv11",
                 "sctp",
                 "system-proxies"
             ]

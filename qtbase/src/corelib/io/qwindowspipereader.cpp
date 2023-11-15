@@ -40,6 +40,7 @@
 #include "qwindowspipereader_p.h"
 #include "qiodevice_p.h"
 #include <qelapsedtimer.h>
+#include <qscopedvaluerollback.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -204,11 +205,11 @@ void QWindowsPipeReader::notified(DWORD errorCode, DWORD numberOfBytesRead)
 
     actualReadBufferSize += numberOfBytesRead;
     readBuffer.truncate(actualReadBufferSize);
-    startAsyncRead();
     if (!readyReadPending) {
         readyReadPending = true;
         emit _q_queueReadyRead(QWindowsPipeReader::QPrivateSignal());
     }
+    startAsyncRead();
 }
 
 /*!
@@ -312,9 +313,8 @@ void QWindowsPipeReader::emitPendingReadyRead()
 {
     if (readyReadPending) {
         readyReadPending = false;
-        inReadyRead = true;
+        QScopedValueRollback<bool> guard(inReadyRead, true);
         emit readyRead();
-        inReadyRead = false;
     }
 }
 
@@ -325,14 +325,14 @@ void QWindowsPipeReader::emitPendingReadyRead()
  */
 bool QWindowsPipeReader::waitForReadyRead(int msecs)
 {
-    if (!readSequenceStarted)
-        return false;
-
     if (readyReadPending) {
         if (!inReadyRead)
             emitPendingReadyRead();
         return true;
     }
+
+    if (!readSequenceStarted)
+        return false;
 
     if (!waitForNotification(msecs))
         return false;

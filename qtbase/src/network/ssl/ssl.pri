@@ -60,17 +60,29 @@ qtConfig(ssl) {
         HEADERS += ssl/qsslcontext_openssl_p.h \
                    ssl/qsslsocket_openssl_p.h \
                    ssl/qsslsocket_openssl_symbols_p.h
-        SOURCES += ssl/qsslcertificate_openssl.cpp \
-                   ssl/qsslcontext_openssl.cpp \
+        SOURCES += ssl/qsslsocket_openssl_symbols.cpp \
                    ssl/qssldiffiehellmanparameters_openssl.cpp \
+                   ssl/qsslcertificate_openssl.cpp \
                    ssl/qsslellipticcurve_openssl.cpp \
                    ssl/qsslkey_openssl.cpp \
                    ssl/qsslsocket_openssl.cpp \
-                   ssl/qsslsocket_openssl_symbols.cpp
+                   ssl/qsslcontext_openssl.cpp
+
+        qtConfig(opensslv11) {
+            HEADERS += ssl/qsslsocket_openssl11_symbols_p.h
+            SOURCES += ssl/qsslsocket_openssl11.cpp \
+                       ssl/qsslcontext_openssl11.cpp
+
+            QMAKE_CXXFLAGS += -DOPENSSL_API_COMPAT=0x10100000L
+        } else {
+            HEADERS += ssl/qsslsocket_opensslpre11_symbols_p.h
+            SOURCES += ssl/qsslsocket_opensslpre11.cpp \
+                       ssl/qsslcontext_opensslpre11.cpp
+        }
 
         darwin:SOURCES += ssl/qsslsocket_mac_shared.cpp
 
-        android:!android-embedded: SOURCES += ssl/qsslsocket_openssl_android.cpp
+        android: SOURCES += ssl/qsslsocket_openssl_android.cpp
 
         # Add optional SSL libs
         # Static linking of OpenSSL with msvc:

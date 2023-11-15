@@ -218,6 +218,7 @@ private:
 protected:
     bool verifyErrorsHaveBeenIgnored();
     bool paused;
+    bool systemOrSslErrorDetected = false;
 };
 
 QT_END_NAMESPACE
